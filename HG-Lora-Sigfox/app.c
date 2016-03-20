@@ -187,6 +187,9 @@ uint8_t app_mode = 0;
 void userbutton_callback(button_id_t button_id)
 {
 	iM880A_SendRadioTelegramwithadress("Button pressed", 14,0xFF,0xFFFF);
+	leuart_send_string("AT$SS= 54 45 41 4D 20 50 49 4F");
+	leuart_send_byte(0x0D);//CR
+	leuart_send_byte(0x0A);//CR
 	//uart_send_string(lora, "Button Pressed\n");
 	#ifdef PLATFORM_EFM32GG_STK3700
 		lcd_write_string("Butt %d", button_id);
@@ -315,7 +318,7 @@ LEUART_Init_TypeDef leuart0Init =
 void LEUART0_IRQHandler(void)
 {
     char ucRxData = LEUART0->RXDATA;
-    LEUART0->TXDATA = ucRxData;
+    //LEUART0->TXDATA = ucRxData;
     // debugger printf
     //printf("IRQ: %c\n",ucRxData);
 }
@@ -323,10 +326,10 @@ void LEUART0_IRQHandler(void)
 void initLeuart(void)
 {
 	CMU_ClockSelectSet(cmuClock_LFA, cmuSelect_LFXO);
-	  CMU_ClockSelectSet(cmuClock_LFB, cmuSelect_LFXO);
+	CMU_ClockSelectSet(cmuClock_LFB, cmuSelect_LFXO);
 	CMU_ClockEnable(cmuClock_CORELE,true);
 	CMU_ClockEnable(cmuClock_LEUART0,cmuClkDiv_1);
-	    CMU_ClockEnable(cmuClock_LEUART0, true);
+	CMU_ClockEnable(cmuClock_LEUART0, true);
 
 
   /* Enable GPIO for LEUART1. RX is on C7 */
@@ -354,6 +357,22 @@ void initLeuart(void)
     /* enable interrupt on every char */
     LEUART0->IEN = LEUART_IEN_RXDATAV;
     LEUART_Enable(LEUART0, leuartEnable);
+}
+
+void leuart_send_byte(uint8_t data) {
+  while (!(LEUART0->STATUS & LEUART_STATUS_TXBL));
+  //while(!(LEUART0->STATUS & (1 << 6))); // wait for TX buffer to empty
+  LEUART0->TXDATA = data;
+}
+
+void leuart_send_bytes(void const *data, size_t length) {
+	for(uint8_t i=0; i<length; i++)	{
+		leuart_send_byte(((uint8_t const*)data)[i]);
+	}
+}
+
+void leuart_send_string(const char *string) {
+  leuart_send_bytes(string, strnlen(string, 100));
 }
 void bootstrap()
 {
