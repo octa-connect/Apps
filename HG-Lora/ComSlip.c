@@ -69,7 +69,6 @@
 
 #include "ComSlip.h"
 #include "hwuart.h"
-
 //------------------------------------------------------------------------------
 //
 //  Protocol Definitions
@@ -131,7 +130,7 @@ ComSlip_Init()
     
     // Register ComSlip_ProcessRxByte at LDDUART
     //LDDUsart_RegisterClient(ComSlip_ProcessRxByte);
-    lora = uart_init(3, 115200, 1);
+    lora = uart_init(1, 115200, 4);
 	uart_enable(lora);
 	uart_set_rx_interrupt_callback(lora, &ComSlip_ProcessRxByte);
 	uart_rx_interrupt_enable(lora);

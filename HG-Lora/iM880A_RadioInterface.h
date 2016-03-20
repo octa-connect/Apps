@@ -74,7 +74,9 @@
 // Include Files
 //
 //------------------------------------------------------------------------------
-#include "bsp.h"
+//#include "bsp.h"
+#include "inttypes.h"
+#include <stdbool.h>
 #include "RadioDefs.h"
 
 
@@ -246,6 +248,8 @@ iM880A_Configure(void);
 
 TWiMDLRResultcodes 
 iM880A_SendRadioTelegram(uint8_t* payload, uint16_t length);
+TWiMDLRResultcodes
+iM880A_SendRadioTelegramwithadress(uint8_t* payload, uint16_t length, uint8_t groupaddress, uint16_t devaddress);
 
 TWiMODLRResult 
 iM880A_PingRequest();

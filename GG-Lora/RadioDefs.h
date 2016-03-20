@@ -211,8 +211,8 @@ typedef struct RadioMsg_T
 #define COMRADIO_CFG_DEFAULT_RFRADIOMODE        RADIO_MODE_NORMAL
 // Default to high power band with 869.525 MHz
 #define COMRADIO_CFG_DEFAULT_RFCHANNEL_MSB      0xD9
-#define COMRADIO_CFG_DEFAULT_RFCHANNEL_MID      0x61
-#define COMRADIO_CFG_DEFAULT_RFCHANNEL_LSB      0x99
+#define COMRADIO_CFG_DEFAULT_RFCHANNEL_MID      0x00
+#define COMRADIO_CFG_DEFAULT_RFCHANNEL_LSB      0x00
 // Channel zero within the high power band
 #define COMRADIO_CFG_DEFAULT_RFCHANNEL          0x12
 // bandwidth default is 125 kHz
@@ -220,7 +220,7 @@ typedef struct RadioMsg_T
 // Default device address
 #define COMRADIO_CFG_DEFAULT_RFDEVICEADDRESS    0x1218
 // error coding default is 4/6
-#define COMRADIO_CFG_DEFAULT_RFERRORCODING      RF_LORA_FEC_4_6
+#define COMRADIO_CFG_DEFAULT_RFERRORCODING      RF_LORA_FEC_4_5
 // default FSK datarate
 #define COMRADIO_CFG_DEFAULT_RFFSKDATARATE      RF_FSK_DATARATE_250_KBPS
 // default miscellaneous options:use extended output format, use RTC
@@ -238,7 +238,7 @@ typedef struct RadioMsg_T
 // rx window default, no window
 #define COMRADIO_CFG_DEFAULT_RFRXWINDOW         3000 // 3s
 // default spreading factor = 7
-#define COMRADIO_CFG_DEFAULT_RFSPREADINGFACTOR  RF_LORA_SF_11
+#define COMRADIO_CFG_DEFAULT_RFSPREADINGFACTOR  RF_LORA_SF_7
 // default tx group address
 #define COMRADIO_CFG_DEFAULT_TXGROUPADDRESS     0x12
 // default tx address: broadcast

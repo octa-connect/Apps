@@ -237,7 +237,7 @@ uint8_t lora_message_length = 0;
 // Toggle different operational modes
 void userbutton_callback(button_id_t button_id)
 {
-	iM880A_SendRadioTelegram("Button pressed", 14);
+	iM880A_SendRadioTelegramwithadress("Button pressed", 14,0xFF,0xFFFF);
 	//uart_send_string(lora, "Button Pressed\n");
 	#ifdef PLATFORM_EFM32GG_STK3700
 		lcd_write_string("Butt %d", button_id);

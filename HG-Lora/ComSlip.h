@@ -69,8 +69,9 @@
 // Include Files
 //
 //------------------------------------------------------------------------------
-#include "bsp.h"
-
+//#include "bsp.h"
+#include "inttypes.h"
+#include <stdbool.h>
 
 typedef uint8_t* (*TComSlipCbByteIndication)(uint8_t* rxBuffer, uint16_t length);
 

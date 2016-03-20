@@ -29,4 +29,4 @@
 #SET_PROPERTY(CACHE ${APP_PREFIX}_<param_name> PROPERTY STRINGS "value1;value2")
 #
 
-APP_BUILD(NAME ${APP_NAME} SOURCES app.c ComSlip.c ComSlip.h CRC16.c CRC16.h iM880A_RadioInterface.c iM880A_RadioInterface.h RadioDefs.h LIBS framework)
+APP_BUILD(NAME ${APP_NAME} SOURCES app.c ComSlip.c ComSlip.h CRC16.c CRC16.h iM880A_RadioInterface.c iM880A_RadioInterface.h RadioDefs.h LIBS d7ap framework)

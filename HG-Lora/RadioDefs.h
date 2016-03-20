@@ -65,7 +65,9 @@
 #ifndef __RadioDefs_H__
 #define __RadioDefs_H__
 
-#include "bsp.h"
+//#include "bsp.h"
+#include "inttypes.h"
+#include <stdbool.h>
 
 #define RF_LORA_CHANNEL_BW_125K     0
 #define RF_LORA_CHANNEL_BW_250K     1
@@ -211,16 +213,16 @@ typedef struct RadioMsg_T
 #define COMRADIO_CFG_DEFAULT_RFRADIOMODE        RADIO_MODE_NORMAL
 // Default to high power band with 869.525 MHz
 #define COMRADIO_CFG_DEFAULT_RFCHANNEL_MSB      0xD9
-#define COMRADIO_CFG_DEFAULT_RFCHANNEL_MID      0x61
-#define COMRADIO_CFG_DEFAULT_RFCHANNEL_LSB      0x99
+#define COMRADIO_CFG_DEFAULT_RFCHANNEL_MID      0x00
+#define COMRADIO_CFG_DEFAULT_RFCHANNEL_LSB      0x00
 // Channel zero within the high power band
-#define COMRADIO_CFG_DEFAULT_RFCHANNEL          0x00
+#define COMRADIO_CFG_DEFAULT_RFCHANNEL          0x12
 // bandwidth default is 125 kHz
 #define COMRADIO_CFG_DEFAULT_RFCHANNELBW        RF_LORA_CHANNEL_BW_125K
 // Default device address
-#define COMRADIO_CFG_DEFAULT_RFDEVICEADDRESS    0x1234
+#define COMRADIO_CFG_DEFAULT_RFDEVICEADDRESS    0x1219
 // error coding default is 4/6
-#define COMRADIO_CFG_DEFAULT_RFERRORCODING      RF_LORA_FEC_4_6
+#define COMRADIO_CFG_DEFAULT_RFERRORCODING      RF_LORA_FEC_4_5
 // default FSK datarate
 #define COMRADIO_CFG_DEFAULT_RFFSKDATARATE      RF_FSK_DATARATE_250_KBPS
 // default miscellaneous options:use extended output format, use RTC
@@ -234,13 +236,13 @@ typedef struct RadioMsg_T
 // Radio Modulation Mode: LoRa
 #define COMRADIO_CFG_DEFAULT_RFRADIOMODULATION  0x00
 // RX group address default
-#define COMRADIO_CFG_DEFAULT_RXGROUPADDRESS     0x10
+#define COMRADIO_CFG_DEFAULT_RXGROUPADDRESS     0x12
 // rx window default, no window
 #define COMRADIO_CFG_DEFAULT_RFRXWINDOW         3000 // 3s
 // default spreading factor = 7
-#define COMRADIO_CFG_DEFAULT_RFSPREADINGFACTOR  RF_LORA_SF_11
+#define COMRADIO_CFG_DEFAULT_RFSPREADINGFACTOR  RF_LORA_SF_7
 // default tx group address
-#define COMRADIO_CFG_DEFAULT_TXGROUPADDRESS     0x10
+#define COMRADIO_CFG_DEFAULT_TXGROUPADDRESS     0x12
 // default tx address: broadcast
 #define COMRADIO_CFG_DEFAULT_TXADDRESS          0x1234
 

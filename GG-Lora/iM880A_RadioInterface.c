@@ -217,7 +217,25 @@ iM880A_SendRadioTelegram(uint8_t* payload, uint16_t length)
     return iM880A_SendHCIMessage(RADIOLINK_SAP_ID, RADIOLINK_MSG_SEND_URADIO_MSG_REQ, NULL, length + DEST_ADDR_SIZE);
 }
 
+TWiMDLRResultcodes
+iM880A_SendRadioTelegramwithadress(uint8_t* payload, uint16_t length, uint8_t groupaddress, uint16_t devaddress)
+{
+    TxMessage.Payload[0] = groupaddress;
+    TxMessage.Payload[1] = LOBYTE(devaddress);
+    TxMessage.Payload[2] = HIBYTE(devaddress);
 
+    if(payload && length)
+    {
+        uint8_t*  dstPtr  = TxMessage.Payload + DEST_ADDR_SIZE;
+        int     n       = (int)length;
+
+        // copy bytes
+        while(n--)
+            *dstPtr++ = *payload++;
+    }
+
+    return iM880A_SendHCIMessage(RADIOLINK_SAP_ID, RADIOLINK_MSG_SEND_URADIO_MSG_REQ, NULL, length + DEST_ADDR_SIZE);
+}
 
 //------------------------------------------------------------------------------
 //
@@ -350,7 +368,7 @@ iM880A_Configure(void)
 {
     uint8_t offset=0;
     
-    configBuffer[offset++]   = 0x00;                                        // NVM Flag
+    configBuffer[offset++]   = 0x00;                                        // NVM Flag 0=volatile, 1 = permanent
     configBuffer[offset++]   = COMRADIO_CFG_DEFAULT_RFRADIOMODE;            // 0
     configBuffer[offset++]   = COMRADIO_CFG_DEFAULT_RXGROUPADDRESS;         // 1
     configBuffer[offset++]   = COMRADIO_CFG_DEFAULT_TXGROUPADDRESS;         // 2
@@ -370,11 +388,13 @@ iM880A_Configure(void)
     configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFRXOPTIONS;             // 16
     HTON16(&configBuffer[offset], COMRADIO_CFG_DEFAULT_RFRXWINDOW);         // 17
     offset += 2;
-    configBuffer[offset++] = 0x00;                                          // 19
-    configBuffer[offset++] = 0x07;                                          // 20
-    
+    configBuffer[offset++] = 0x07;                                          // 19
+    configBuffer[offset++] = 0x03;                                          // 20
+    configBuffer[offset++] = 0x00;       //FSK 50000bps                     // 21
+    configBuffer[offset++] = 0xA6;       				                   // 22
+    configBuffer[offset++] = 0xFF;                                          // 22
     // Set Configuration
-    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_SET_RADIO_CONFIG_REQ, (unsigned char*)&configBuffer, 22);    
+    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_SET_RADIO_CONFIG_REQ, (unsigned char*)&configBuffer, offset);
 }
 
 
