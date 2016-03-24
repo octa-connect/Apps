@@ -107,26 +107,33 @@
         (dstPtr)[2] = LOBYTE(HIWORD(value));    \
         (dstPtr)[3] = HIBYTE(HIWORD(value));
 
+
+//------------------------------------------------------------------------------
+//
+//	Section RAM
+//
+//------------------------------------------------------------------------------
+
 TWiMODLR_HCIMessage TxMessage;
 TWiMODLR_HCIMessage RxMessage;
 
 
-TRadioInterfaceCbRxIndication cbRxIndication;
-TRadioInterfaceCbTxIndication cbTxIndication;
+TRadioInterfaceCbMsgIndication          cbMsgIndication;
+TRadioInterfaceCbLoRaWANHCIResponse     cbLoRaWANHCIResponse;
+TRadioInterfaceCbDevMgmtHCIResponse     cbDevMgmtHCIResponse;
 
 
-static uint8_t configBuffer[22];
 
 
 //------------------------------------------------------------------------------
 //
-//  iM880A_SendHCIMessage
+//  SendHCIMessage
 //
-//  @brief  send generic HCI message to iM880A
+//  @brief  Send a HCI message to the radio module (with or without payload)
 //
 //------------------------------------------------------------------------------
 
-static TWiMDLRResultcodes 
+int
 iM880A_SendHCIMessage(uint8_t sapID, uint8_t msgID, uint8_t* payload, uint16_t length)
 {
     // 1. check parameter
@@ -183,50 +190,30 @@ iM880A_SendHCIMessage(uint8_t sapID, uint8_t msgID, uint8_t* payload, uint16_t l
         return WiMODLR_RESULT_OK;
     }
 
-    // SLIP layer wasn't able to sent
-    return WiMODLR_RESULT_TRANMIT_ERROR;
+    // error - SLIP layer couldn't sent message
+    return -1;
 }
+
+
 
 
 
 //------------------------------------------------------------------------------
 //
-//  iM880A_SendRadioTelegram
+//  iM880A_SendUDataTelegram
 //
-//  @brief  send radio telegram to default address
+//  @brief  Send out an unreliable (unconfirmed) data telegram
 //
 //------------------------------------------------------------------------------
-
-TWiMDLRResultcodes 
-iM880A_SendRadioTelegram(uint8_t* payload, uint16_t length)
-{
-    TxMessage.Payload[0] = COMRADIO_CFG_DEFAULT_TXGROUPADDRESS;
-    TxMessage.Payload[1] = LOBYTE(COMRADIO_CFG_DEFAULT_TXADDRESS);
-    TxMessage.Payload[2] = HIBYTE(COMRADIO_CFG_DEFAULT_TXADDRESS);
-    
-    if(payload && length)
-    {
-        uint8_t*  dstPtr  = TxMessage.Payload + DEST_ADDR_SIZE;
-        int     n       = (int)length;
-
-        // copy bytes
-        while(n--)
-            *dstPtr++ = *payload++;
-    }
-    
-    return iM880A_SendHCIMessage(RADIOLINK_SAP_ID, RADIOLINK_MSG_SEND_URADIO_MSG_REQ, NULL, length + DEST_ADDR_SIZE);
-}
 
 TWiMDLRResultcodes
-iM880A_SendRadioTelegramwithadress(uint8_t* payload, uint16_t length, uint8_t groupaddress, uint16_t devaddress)
+iM880A_SendUDataTelegram(uint8_t* payload, uint16_t length)
 {
-    TxMessage.Payload[0] = groupaddress;
-    TxMessage.Payload[1] = LOBYTE(devaddress);
-    TxMessage.Payload[2] = HIBYTE(devaddress);
+    TxMessage.Payload[0] = LORA_MAC_PORT;
 
     if(payload && length)
     {
-        uint8_t*  dstPtr  = TxMessage.Payload + DEST_ADDR_SIZE;
+        uint8_t*  dstPtr  = TxMessage.Payload + 1;
         int     n       = (int)length;
 
         // copy bytes
@@ -234,21 +221,151 @@ iM880A_SendRadioTelegramwithadress(uint8_t* payload, uint16_t length, uint8_t gr
             *dstPtr++ = *payload++;
     }
 
-    return iM880A_SendHCIMessage(RADIOLINK_SAP_ID, RADIOLINK_MSG_SEND_URADIO_MSG_REQ, NULL, length + DEST_ADDR_SIZE);
+    return (TWiMDLRResultcodes) iM880A_SendHCIMessage(LORAWAN_ID, LORAWAN_MSG_SEND_UDATA_REQ, NULL, length + 1);
 }
+
+
+
+//------------------------------------------------------------------------------
+//
+//  iM880A_SendCDataTelegram
+//
+//  @brief  Send out an confirmed data telegram
+//
+//------------------------------------------------------------------------------
+
+TWiMDLRResultcodes
+iM880A_SendCDataTelegram(uint8_t* payload, uint16_t length)
+{
+    TxMessage.Payload[0] = LORA_MAC_PORT;
+
+    if(payload && length)
+    {
+        uint8_t*  dstPtr  = TxMessage.Payload + 1;
+        int     n       = (int)length;
+
+        // copy bytes
+        while(n--)
+            *dstPtr++ = *payload++;
+    }
+
+    return (TWiMDLRResultcodes) iM880A_SendHCIMessage(LORAWAN_ID, LORAWAN_MSG_SEND_CDATA_REQ, NULL, length + 1);
+}
+
+
+//------------------------------------------------------------------------------
+//
+//  iM880A_DirectDeviceActivation
+//
+//  @brief  Perform Direct Activation
+//
+//------------------------------------------------------------------------------
+
+TWiMDLRResultcodes
+iM880A_DirectDeviceActivation(uint32_t deviceAddress, uint8_t* nwkSessionKey, uint8_t* appSessionKey)
+{
+    HTON32(&TxMessage.Payload[0], deviceAddress);
+
+    if(nwkSessionKey)
+    {
+        uint8_t*  dstPtr  = TxMessage.Payload + DEVICE_ADDR_LEN;
+        int     n       = KEY_LEN;
+
+        // copy bytes
+        while(n--)
+            *dstPtr++ = *nwkSessionKey++;
+    }
+
+    if(appSessionKey)
+    {
+        uint8_t*  dstPtr  = TxMessage.Payload + DEVICE_ADDR_LEN + KEY_LEN;
+        int     n       = KEY_LEN;
+
+        // copy bytes
+        while(n--)
+            *dstPtr++ = *appSessionKey++;
+    }
+    
+    return (TWiMDLRResultcodes) iM880A_SendHCIMessage(LORAWAN_ID, LORAWAN_MSG_ACTIVATE_DEVICE_REQ, NULL, DEVICE_ADDR_LEN + KEY_LEN + KEY_LEN);
+}
+
+
+
+//------------------------------------------------------------------------------
+//
+//  iM880A_SetJoinParameters
+//
+//  @brief  Configure the Join parameters
+//
+//------------------------------------------------------------------------------
+
+TWiMDLRResultcodes
+iM880A_SetJoinParameters(uint8_t* appEUI, uint8_t* deviceEUI, uint8_t* deviceKey)
+{
+
+    if(appEUI)
+    {
+        uint8_t*  dstPtr  = TxMessage.Payload;
+        int     n       = EUI_LEN;
+
+        // copy bytes
+        while(n--)
+            *dstPtr++ = *appEUI++;
+    }
+
+    if(deviceEUI)
+    {
+        uint8_t*  dstPtr  = TxMessage.Payload + EUI_LEN;
+        int     n       = EUI_LEN;
+
+        // copy bytes
+        while(n--)
+            *dstPtr++ = *deviceEUI++;
+    }
+
+    if(deviceKey)
+    {
+        uint8_t*  dstPtr  = TxMessage.Payload + EUI_LEN + EUI_LEN;
+        int     n       = KEY_LEN;
+
+        // copy bytes
+        while(n--)
+            *dstPtr++ = *deviceKey++;
+    }
+
+    return (TWiMDLRResultcodes) iM880A_SendHCIMessage(LORAWAN_ID, LORAWAN_MSG_SET_JOIN_PARAM_REQ, NULL, EUI_LEN + EUI_LEN + KEY_LEN);
+}
+
+
+
+//------------------------------------------------------------------------------
+//
+//  iM880A_JoinNetworkRequest
+//
+//  @brief   Send out a Join Request message
+//
+//------------------------------------------------------------------------------
+
+TWiMDLRResultcodes
+iM880A_JoinNetworkRequest(void)
+{
+    return (TWiMDLRResultcodes) iM880A_SendHCIMessage(LORAWAN_ID, LORAWAN_MSG_JOIN_NETWORK_REQ, NULL, 0);
+}
+
+
 
 //------------------------------------------------------------------------------
 //
 //  iM880A_PingRequest
 //
-//  @brief  send ping to check communication link
+//  @brief  Send ping to check communication link
 //
 //------------------------------------------------------------------------------
 
 TWiMODLRResult
 iM880A_PingRequest()
 {
-    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_PING_REQ, NULL, 0);
+    return (TWiMDLRResultcodes) iM880A_SendHCIMessage(DEVMGMT_ID, DEVMGMT_MSG_PING_REQ, NULL, 0);
 }
 
 
@@ -257,7 +374,7 @@ iM880A_PingRequest()
 //
 //  iM880A_CbProcessRxMessage
 //
-//  @brief: handle incoming HCI message
+//  @brief: Handle incoming HCI messages
 //
 //------------------------------------------------------------------------------
 
@@ -270,35 +387,47 @@ iM880A_CbProcessRxMessage(uint8_t* rxBuffer, uint16_t length)
         // 2. check min length, 2 bytes for SapID + MsgID + 2 bytes CRC16
         if(length >= (WIMODLR_HCI_MSG_HEADER_SIZE + WIMODLR_HCI_MSG_FCS_SIZE))
         {
-            // 3. Hack: since only one RxMessage buffer is used,
-            //          rxBuffer must point to RxMessage.SapId, thus
-            //          memcpy to RxMessage structure is not needed here
-
             // add length
             RxMessage.Length = length - (WIMODLR_HCI_MSG_HEADER_SIZE + WIMODLR_HCI_MSG_FCS_SIZE);
 
             // dispatch completed RxMessage
-            // 1. forward message according to SapID
+            // 3. forward message according to SapID / MsgID
             switch(RxMessage.SapID)
             {
-                case    DEVMGMT_SAP_ID:
-                        
-                        // TODO: handle messaged for DEVMGMT_SAP_ID, e.g. ping response
-                        
+                case    DEVMGMT_ID:
+
+                        // forward Msg IDs to application, e.g. ping response
+                        (*cbLoRaWANHCIResponse)(RxMessage.MsgID, RxMessage.Payload, length);
+
                         break;
 
-                case    RADIOLINK_SAP_ID:
-                        if(RxMessage.MsgID == RADIOLINK_MSG_URADIO_MSG_TX_IND)
+                case    LORAWAN_ID:
+                        // handle TX indications
+                        if((RxMessage.MsgID == LORAWAN_MSG_SEND_UDATA_TX_IND)   ||
+                           (RxMessage.MsgID == LORAWAN_MSG_SEND_CDATA_TX_IND)   ||
+                           (RxMessage.MsgID == LORAWAN_MSG_JOIN_NETWORK_TX_IND))
                         {
-                            (*cbTxIndication)(NULL, trx_TXDone);
+                            (*cbMsgIndication)(NULL, 0, trx_TXDone);
                         }
-                        else if(RxMessage.MsgID == RADIOLINK_MSG_RECV_URADIO_MSG_IND)
+                        // handle RX messages
+                        else if((RxMessage.MsgID == LORAWAN_MSG_RECV_UDATA_IND) ||
+                                (RxMessage.MsgID == LORAWAN_MSG_RECV_CDATA_IND))
                         {
-                            //(*cbRxIndication)(RxMessage.Payload, length, trx_RXDone);
-                        	(*cbRxIndication)(rxBuffer, length, trx_RXDone); //--> original message
+                            (*cbMsgIndication)(RxMessage.Payload, length, trx_RXDone);
                         }
+
+                        // handle ACKs
+                        else if(RxMessage.MsgID == LORAWAN_MSG_RECV_ACK_IND)
+                        {
+                            (*cbMsgIndication)(NULL, 0, trx_ACKDone);
+                        }
+
+                        // handle other responses
                         else
-                            ;
+                        {
+                            (*cbLoRaWANHCIResponse)(RxMessage.MsgID, RxMessage.Payload, length);
+                        }
+
                         break;
 
                 default:
@@ -314,6 +443,7 @@ iM880A_CbProcessRxMessage(uint8_t* rxBuffer, uint16_t length)
 
     // return same buffer again, keep receiver enabled
     return &RxMessage.SapID;
+
 }
 
 
@@ -321,19 +451,19 @@ iM880A_CbProcessRxMessage(uint8_t* rxBuffer, uint16_t length)
 //
 //  iM880A_Init
 //
-//  @brief: initialize radio interface
+//  @brief: Initialize radio interface
 //
 //------------------------------------------------------------------------------
 
-void 
+void
 iM880A_Init(void)
 {
     // Init Slip Layer
     ComSlip_Init();
     ComSlip_RegisterClient(iM880A_CbProcessRxMessage);
-    
+
     // pass first RxBuffer and enable receiver/decoder
-    ComSlip_SetRxBuffer(&RxMessage.SapID, (uint16_t)WIMODLR_HCI_RX_MESSAGE_SIZE);        
+    ComSlip_SetRxBuffer(&RxMessage.SapID, (uint16_t)WIMODLR_HCI_RX_MESSAGE_SIZE);
 }
 
 
@@ -341,118 +471,17 @@ iM880A_Init(void)
 //
 //  iM880A_RegisterRadioCallbacks
 //
-//  @brief: set callback functions for Rx/Tx
+//  @brief: Set callback functions for incoming HCI messages
 //
 //------------------------------------------------------------------------------
 
-void 
-iM880A_RegisterRadioCallbacks(TRadioInterfaceCbRxIndication cbRxInd, 
-                              TRadioInterfaceCbTxIndication cbTxInd)                
+void
+iM880A_RegisterRadioCallbacks(TRadioInterfaceCbMsgIndication        cbMsgInd,
+                              TRadioInterfaceCbLoRaWANHCIResponse   cbLoRaWANHCIRsp,
+                              TRadioInterfaceCbDevMgmtHCIResponse   cbDevMgmtHCIRsp)
 {
-    cbRxIndication = cbRxInd;
-    cbTxIndication = cbTxInd;    
-}
-
-
-
-//------------------------------------------------------------------------------
-//
-//  iM880A_Configure
-//
-//  @brief: Configure iM880A
-//
-//------------------------------------------------------------------------------
-
-TWiMODLRResult  iM880A_Configure(void)
-{
-    uint8_t offset=0;
-    
-    configBuffer[offset++]   = 0x00;                                        // NVM Flag 0=volatile, 1 = permanent
-    configBuffer[offset++]   = COMRADIO_CFG_DEFAULT_RFRADIOMODE;            // 0
-    configBuffer[offset++]   = COMRADIO_CFG_DEFAULT_RXGROUPADDRESS;         // 1
-    configBuffer[offset++]   = COMRADIO_CFG_DEFAULT_TXGROUPADDRESS;         // 2
-    HTON16(&configBuffer[offset], COMRADIO_CFG_DEFAULT_RFDEVICEADDRESS);    // 3
-    offset += 2;
-    HTON16(&configBuffer[offset], COMRADIO_CFG_DEFAULT_TXADDRESS);          // 5
-    offset += 2;
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFRADIOMODULATION;       // 7
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFCHANNEL_LSB;           // 8
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFCHANNEL_MID;           // 9
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFCHANNEL_MSB;           // 10
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFCHANNELBW;             // 11
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFSPREADINGFACTOR;       // 12
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFERRORCODING;           // 13
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFPOWERLEVEL;            // 14    
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFTXOPTIONS;             // 15
-    configBuffer[offset++]  = COMRADIO_CFG_DEFAULT_RFRXOPTIONS;             // 16
-    HTON16(&configBuffer[offset], COMRADIO_CFG_DEFAULT_RFRXWINDOW);         // 17
-    offset += 2;
-    configBuffer[offset++] = 0x07;                                          // 19
-    configBuffer[offset++] = 0x03;                                          // 20
-    configBuffer[offset++] = 0x00;       //FSK 50000bps                     // 21
-    configBuffer[offset++] = 0xA6;       				                   // 22
-    configBuffer[offset++] = 0xFF;                                          // 22
-    // Set Configuration
-    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_SET_RADIO_CONFIG_REQ, (unsigned char*)&configBuffer, offset);
-}
-
-
-//------------------------------------------------------------------------------
-//
-//  iM880A_PowerDown
-//
-//  @brief: Set iM880A to low power mode
-//
-//------------------------------------------------------------------------------
-TWiMODLRResult 
-iM880A_PowerDown(void)
-{
-    uint8_t payload[1] = {0x00};
-    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_ENTER_LPM_REQ, payload, 1);    
-}
-
-
-//------------------------------------------------------------------------------
-//
-//  iM880A_WakeUp
-//
-//  @brief: Wake up iM880A from power down mode
-//
-//------------------------------------------------------------------------------
-TWiMODLRResult 
-iM880A_WakeUp(void)
-{
-    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_PING_REQ, NULL, 0);
-}
-
-
-//------------------------------------------------------------------------------
-//
-//  iM880A_ResetRadioConfig
-//
-//  @brief: Restore factore settings
-//
-//------------------------------------------------------------------------------
-
-TWiMODLRResult
-iM880A_ResetRadioConfig(void)
-{
-    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_RESET_RADIO_CONFIG_REQ, NULL, 0);      
-}
-
-
-
-//------------------------------------------------------------------------------
-//
-//  iM880A_ResetRequest
-//
-//  @brief: iM880A software initiated reset
-//
-//------------------------------------------------------------------------------
-
-TWiMODLRResult
-iM880A_ResetRequest(void)
-{
-    return iM880A_SendHCIMessage(DEVMGMT_SAP_ID, DEVMGMT_MSG_RESET_REQ, NULL, 0);        
+    cbMsgIndication      = cbMsgInd;
+    cbLoRaWANHCIResponse = cbLoRaWANHCIRsp;
+    cbDevMgmtHCIResponse = cbDevMgmtHCIRsp;
 }
 

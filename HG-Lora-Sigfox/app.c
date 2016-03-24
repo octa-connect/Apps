@@ -30,21 +30,24 @@
 #include "d7ap_stack.h"
 #include "fs.h"
 #include "hwuart.h"
-#if (!defined PLATFORM_EFM32GG_STK3700 && !defined PLATFORM_EFM32HG_STK3400 && !defined PLATFORM_EZR32LG_WSTK6200A)
+#if (!defined PLATFORM_EFM32GG_STK3700 && !defined PLATFORM_EFM32HG_STK3400 && !defined PLATFORM_EZR32LG_WSTK6200A && !defined PLATFORM_OCTA_GATEWAY)
 	#error Mismatch between the configured platform and the actual platform.
 #endif
 
 #include "userbutton.h"
-#include "platform_sensors.h"
+#if !defined PLATFORM_OCTA_GATEWAY
+	#include "platform_sensors.h"
+#endif
 //#include "platform_lcd.h"
 // HCI wrapper file
 #include "iM880A_RadioInterface.h"
 #include "CRC16.h"
 
+
 #include "em_leuart.h"
 #include "em_gpio.h"
 #include "em_cmu.h"
-
+#define SENSOR_UPDATE	TIMER_TICKS_PER_SEC * 1
 #define SENDALP
 //#define PASSTROUGH
 //------------------------------------------------------------------------------
@@ -190,6 +193,8 @@ void userbutton_callback(button_id_t button_id)
 	leuart_send_string("AT$SS= 54 45 41 4D 20 50 49 4F");
 	leuart_send_byte(0x0D);//CR
 	leuart_send_byte(0x0A);//CR
+	uint8_t t = 0x01;
+	fs_write_file(SENSOR_FILE_ID, 0, (uint8_t*)&t, 8);
 	//uart_send_string(lora, "Button Pressed\n");
 	#ifdef PLATFORM_EFM32GG_STK3700
 		lcd_write_string("Butt %d", button_id);
@@ -218,25 +223,30 @@ void execute_sensor_measurement()
 #endif
 
 #if (defined PLATFORM_EFM32HG_STK3400  || defined PLATFORM_EZR32LG_WSTK6200A)
-  //lcd_clear();
+  char str[30];
+
   float internal_temp = hw_get_internal_temperature();
-  //lcd_write_string("Int T: %2d.%d C\n", (int)internal_temp, (int)(internal_temp*10)%10);
-  //log_print_string("Int T: %2d.%d C\n", (int)internal_temp, (int)(internal_temp*10)%10);
+  //sprintf(str, "Int T: %2d.%d C", (int)internal_temp, (int)(internal_temp*10)%10);
+  //lcd_write_line(2,str);
+  //log_print_string(str);
 
   uint32_t rhData;
   uint32_t tData;
   getHumidityAndTemperature(&rhData, &tData);
 
-  //lcd_write_string("Ext T: %d.%d C\n", (tData/1000), (tData%1000)/100);
-  //log_print_string("Temp: %d.%d C\n", (tData/1000), (tData%1000)/100);
+  //sprintf(str, "Ext T: %d.%d C", (tData/1000), (tData%1000)/100);
+  //lcd_write_line(3,str);
+  //log_print_string(str);
 
-  //lcd_write_string("Ext H: %d.%d\n", (rhData/1000), (rhData%1000)/100);
-  //log_print_string("Hum: %d.%d\n", (rhData/1000), (rhData%1000)/100);
+  //sprintf(str, "Ext H: %d.%d", (rhData/1000), (rhData%1000)/100);
+  //lcd_write_line(4,str);
+  //log_print_string(str);
 
   uint32_t vdd = hw_get_battery();
 
-  //lcd_write_string("Batt %d mV\n", vdd);
-  //log_print_string("Batt: %d mV\n", vdd);
+  //sprintf(str, "Batt %d mV", vdd);
+ // lcd_write_line(5,str);
+  //log_print_string(str);
 
   //TODO: put sensor values in array
 
@@ -250,7 +260,7 @@ void execute_sensor_measurement()
   fs_write_file(SENSOR_FILE_ID, 0, (uint8_t*)&sensor_values,8);
 #endif
 
-  timer_post_task_delay(&execute_sensor_measurement, TIMER_TICKS_PER_SEC * 1);
+  timer_post_task_delay(&execute_sensor_measurement, TIMER_TICKS_PER_SEC);
 }
 void init_user_files()
 {
@@ -372,13 +382,17 @@ void leuart_send_bytes(void const *data, size_t length) {
 }
 
 void leuart_send_string(const char *string) {
-  leuart_send_bytes(string, strnlen(string, 100));
+  leuart_send_bytes(string, strnlen(string, 15));
 }
+
+static d7asp_init_args_t d7asp_init_args;
+
+
 void bootstrap()
 {
 	//log_print_string("Device booted\n");
 
-	    dae_access_profile_t access_classes[1] = {
+	dae_access_profile_t access_classes[1] = {
 	        {
 	            .control_scan_type_is_foreground = false,
 	            .control_csma_ca_mode = CSMA_CA_MODE_UNC,
@@ -410,9 +424,10 @@ void bootstrap()
 	        .access_profiles = access_classes
 	    };
 
-	    d7ap_stack_init(&fs_init_args, NULL, false);
+	    d7ap_stack_init(&fs_init_args, 0, false);
 
 	    initSensors();
+
 	//console_set_rx_interrupt_callback(&console_rx_cb); //NO CONSOLE
 	//console_rx_interrupt_enable();						//NO CONSOLE
 	//lora = uart_init(3, 115200, 1);
@@ -439,7 +454,7 @@ void bootstrap()
 
     //sched_register_task((&execute_sensor_measurement));
 
-    //timer_post_task_delay(&execute_sensor_measurement, TIMER_TICKS_PER_SEC * 2);
+    //timer_post_task_delay(&execute_sensor_measurement, TIMER_TICKS_PER_SEC);
 
     //lcd_write_string("Lora Sensor\n");
 }

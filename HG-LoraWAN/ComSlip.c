@@ -130,8 +130,14 @@ ComSlip_Init()
     
     // Register ComSlip_ProcessRxByte at LDDUART
     //LDDUsart_RegisterClient(ComSlip_ProcessRxByte);
-    //lora = uart_init(1, 115200, 4);
+    //TODO: Make this setting for all supported devices
+//#if defined(PLATFORM_OCTA_GATEWAY)
     lora = uart_init(0, 115200, 0);
+//#elif defined(PLATFORM_EFM32HG_STK3400)
+//    lora = uart_init(1, 115200, 4);
+//#else
+//	#error NO LORA MODULE SUPPORTED
+//#endif
 	uart_enable(lora);
 	uart_set_rx_interrupt_callback(lora, &ComSlip_ProcessRxByte);
 	uart_rx_interrupt_enable(lora);
