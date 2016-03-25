@@ -71,6 +71,8 @@
 
 #define MODULE_D7AP_FIFO_COMMAND_BUFFER_SIZE 100
 #define ALP_CMD_HANDLER_ID 'D'
+
+uart_handle_t* sigfox;
 //------------------------------------------------------------------------------
 //
 //	Section Typedefs
@@ -224,6 +226,12 @@ uint8_t app_mode_status_changed = 0x00;
 uint8_t app_mode = 0;
 void send_message()
 {
+    //Sigfox
+    uart_send_string(sigfox,"AT");
+    uart_send_byte(sigfox, 0x0D);//CR
+	uart_send_byte(sigfox, 0x0A);//CR
+    
+    //LoraWAN
 #if defined(UNCONFIRMED_DATA_TELEGRAMS)
 
         // Unreliable Data Transmission
@@ -237,16 +245,19 @@ void send_message()
                ; // handle faults
 
 #endif
+    //Dash7
+    float internal_temp = hw_get_internal_temperature();
+	  //lcd_write_temperature(internal_temp*10, 1);
+
+	fs_write_file(SENSOR_FILE_ID, 0, (uint8_t*)&internal_temp, sizeof(internal_temp)); // File 0x40 is configured to use D7AActP trigger an ALP action which broadcasts this file data on Access Class 0
+
+
 }
 // Toggle different operational modes
 void userbutton_callback(button_id_t button_id)
 {
-	//iM880A_SendRadioTelegramwithadress("Button pressed", 14,0xFF,0xFFFF);
 	send_message();
-	float internal_temp = hw_get_internal_temperature();
-	  //lcd_write_temperature(internal_temp*10, 1);
-
-	fs_write_file(SENSOR_FILE_ID, 0, (uint8_t*)&internal_temp, sizeof(internal_temp)); // File 0x40 is configured to use D7AActP trigger an ALP action which broadcasts this file data on Access Class 0
+	
 	//uart_send_string(lora, "Button Pressed\n");
 	#ifdef PLATFORM_EFM32GG_STK3700
 		lcd_write_string("Butt %d", button_id);
@@ -373,8 +384,7 @@ static d7asp_init_args_t d7asp_init_args;
 void iM880A_setup()
 {
 	// Test connection
-	  int ping =  iM880A_PingRequest();
-	  console_print_byte(ping);
+	  iM880A_PingRequest();
 
 	#if defined(ACTIVATION_METHOD_DIRECT)
 
@@ -391,13 +401,20 @@ void iM880A_setup()
 	    iM880A_JoinNetworkRequest();
 
 	#endif
-	timer_post_task_delay(&iM880A_setup, TIMER_TICKS_PER_SEC * 1);
 
+}
+
+
+
+void Sigfox_ProcessRxByte(uint8_t Byte)
+{
+    console_print_byte(Byte);
 }
 void bootstrap()
 {
     console_set_rx_interrupt_callback(console_rx_cb);
-	console_print("Device booted\n");
+	//console_print("Device booted\n");
+    //console_print("ID: ");
 	uint8_t id[8];
 	uint64_t id64 = hw_get_unique_id();
 	// convert from an unsigned long int to a 4-byte array
@@ -410,7 +427,7 @@ void bootstrap()
 	 id[6] = (uint8_t)((id64 >> 8) & 0XFF);
 	 id[7] = (uint8_t)((id64 & 0XFF));
 	console_print_bytes(id,8);
-
+    console_print("\n");
 	dae_access_profile_t access_classes[1] = {
 	        {
 	            .control_scan_type_is_foreground = false,
@@ -457,7 +474,10 @@ void bootstrap()
     sched_register_task((&iM880A_setup));
     timer_post_task_delay(&iM880A_setup, TIMER_TICKS_PER_SEC * 1);
 
-
+    sigfox = uart_init(1, 9600, 3);
+	uart_enable(sigfox);
+	uart_set_rx_interrupt_callback(sigfox, &Sigfox_ProcessRxByte);
+	uart_rx_interrupt_enable(sigfox);
 
     /* Setup LEUART with DMA */
     ubutton_register_callback(0, &userbutton_callback);
