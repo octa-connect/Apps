@@ -41,36 +41,35 @@
 
 uart_handle_t* uart;
 
-// Toggle different operational modes
-void userbutton_callback(button_id_t button_id)
+void userbutton_callback(button_id_t button_id) 			// Write command to Sigfox
 {
-	uart_send_string(uart, "AT"); //+ 0D(CR) 0A(LF)
-	uart_send_byte(uart, 0x0D);
-	uart_send_byte(uart, 0x0A);
+	uart_send_string(uart, "AT"); 							//+ 0D(CR) 0A(LF)
+	uart_send_byte(uart, 0x0D); 							//CR
+	uart_send_byte(uart, 0x0A); 							//LF
 }
 
 void uart_ProcessRxByte(uint8_t Byte)
 {
-    console_print_byte(Byte);
+    console_print_byte(Byte);								// Print received data from Sigfox to console
 }
 
 void console_rx_cb(uint8_t Byte)
 {
-   uart_send_byte(uart, Byte);
+   uart_send_byte(uart, Byte);								// Send from console to sigfox, not available yet
 }
 
 void bootstrap()
 {
-    console_set_rx_interrupt_callback(console_rx_cb);
-	console_print("Device booted\n");
-	uart = uart_init(1, 9600, 3); //Define Ports, Baudrate and pins
-    uart_enable(uart);
-	uart_set_rx_interrupt_callback(uart, &uart_ProcessRxByte);
-	uart_rx_interrupt_enable(uart);
+    console_set_rx_interrupt_callback(console_rx_cb);		// Set console rx callback
+	console_print("Device booted\n"); 						// init
+	uart = uart_init(1, 9600, 3); 							// Define Ports, Baudrate and pins
+    uart_enable(uart);										// Enable UART
+	uart_set_rx_interrupt_callback(uart, &uart_ProcessRxByte); // Set interrupt on UART
+	uart_rx_interrupt_enable(uart);							// Enable interrupt on UART
     
-    /* Setup LEUART with DMA */
-    ubutton_register_callback(0, &userbutton_callback);
-    ubutton_register_callback(1, &userbutton_callback);
+    /* Setup User Buttons */
+    ubutton_register_callback(0, &userbutton_callback);		// ubutton 0 callback
+    ubutton_register_callback(1, &userbutton_callback);		// ubutton 1 callback
 
 }
 
