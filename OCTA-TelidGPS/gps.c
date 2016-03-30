@@ -23,8 +23,8 @@
 #endif
 
 #ifdef PLATFORM_OCTA_GATEWAY
-#define GPS_UART		0
-#define GPS_LOCATION	0
+#define GPS_UART		4
+#define GPS_LOCATION	1
 #endif
 
 #define GPS_BAUDRATE	9600

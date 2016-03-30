@@ -73,6 +73,7 @@
 #define ALP_CMD_HANDLER_ID 'D'
 
 uart_handle_t* sigfox;
+uart_handle_t* sensor;
 //------------------------------------------------------------------------------
 //
 //	Section Typedefs
@@ -96,6 +97,13 @@ typedef enum
 
 uint32_t mainEvent = 0;
 
+static uint8_t sensorBuffer[15] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
+static uint8_t sensorbuffercount = 0;
+int16_t temp = 0x0000;
+int16_t light = 0x0000;
+uint16_t rh = 0x0000;
+uint16_t co2 = 0x0000;
+uint16_t voc = 0x0000;
 
 static uint8_t txBuffer[TX_LENGTH] = {0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF };
 
@@ -214,7 +222,7 @@ CbLoRaWANHCIResponse(uint8_t          msgID,
 }
 
 #define SENSOR_FILE_ID           0x40
-#define SENSOR_FILE_SIZE         8
+#define SENSOR_FILE_SIZE         15
 #define ACTION_FILE_ID           0x41
 
 #define APP_MODE_LEDS		1
@@ -226,6 +234,7 @@ uint8_t app_mode_status_changed = 0x00;
 uint8_t app_mode = 0;
 void send_message()
 {
+    uart_send_string(sensor,"TEST");
     //Sigfox
     uart_send_string(sigfox,"AT");
     uart_send_byte(sigfox, 0x0D);//CR
@@ -273,58 +282,7 @@ void console_rx_cb(uint8_t byte){
 	#endif
 }
 
-void execute_sensor_measurement()
-{
-#if (defined PLATFORM_EFM32GG_STK3700 || defined PLATFORM_OCTA_GATEWAY)
-  float internal_temp = hw_get_internal_temperature();
-  //lcd_write_temperature(internal_temp*10, 1);
 
-  uint32_t vdd = hw_get_battery();
-
-
-  fs_write_file(SENSOR_FILE_ID, 0, (uint8_t*)&internal_temp, sizeof(internal_temp)); // File 0x40 is configured to use D7AActP trigger an ALP action which broadcasts this file data on Access Class 0
-#endif
-
-#if (defined PLATFORM_EFM32HG_STK3400  || defined PLATFORM_EZR32LG_WSTK6200A)
-  char str[30];
-
-  float internal_temp = hw_get_internal_temperature();
-  //sprintf(str, "Int T: %2d.%d C", (int)internal_temp, (int)(internal_temp*10)%10);
-  //lcd_write_line(2,str);
-  //log_print_string(str);
-
-  uint32_t rhData;
-  uint32_t tData;
-  getHumidityAndTemperature(&rhData, &tData);
-
-  //sprintf(str, "Ext T: %d.%d C", (tData/1000), (tData%1000)/100);
-  //lcd_write_line(3,str);
-  //log_print_string(str);
-
-  //sprintf(str, "Ext H: %d.%d", (rhData/1000), (rhData%1000)/100);
-  //lcd_write_line(4,str);
-  //log_print_string(str);
-
-  uint32_t vdd = hw_get_battery();
-
-  //sprintf(str, "Batt %d mV", vdd);
- // lcd_write_line(5,str);
-  //log_print_string(str);
-
-  //TODO: put sensor values in array
-
-  uint8_t sensor_values[8];
-  uint16_t *pointer =  (uint16_t*) sensor_values;
-  *pointer++ = (uint16_t) (internal_temp * 10);
-  *pointer++ = (uint16_t) (tData /100);
-  *pointer++ = (uint16_t) (rhData /100);
-  *pointer++ = (uint16_t) (vdd /10);
-
-  fs_write_file(SENSOR_FILE_ID, 0, (uint8_t*)&sensor_values,8);
-#endif
-
-  timer_post_task_delay(&execute_sensor_measurement, TIMER_TICKS_PER_SEC);
-}
 void init_user_files()
 {
     // file 0x40: contains our sensor data + configure an action file to be executed upon write
@@ -403,32 +361,73 @@ void iM880A_setup()
 	#endif
 
 }
-
-
-
 void Sigfox_ProcessRxByte(uint8_t Byte)
 {
-    console_print_byte(Byte);
+    //console_print_byte(Byte);
+}
+void removefirst()
+{
+    for(int i=0; i< 14; i++)
+    {
+        sensorBuffer[i] = sensorBuffer[i+1];
+    }
+    sensorbuffercount--;
+}
+
+void Sensor_ProcessRxByte(uint8_t Byte)
+{
+    if(sensorbuffercount < 15)
+    {
+        sensorBuffer[sensorbuffercount] = Byte;
+        sensorbuffercount++;
+        if(sensorbuffercount == 15)
+        {
+            uint16_t sumup = 0;
+            for(int i=0;i<14;i++)
+            {
+                sumup += sensorBuffer[i];
+            }
+            uint8_t sum = (sumup & 0xFF);
+            if(sum == sensorBuffer[14])
+            {
+                //Correct sum
+                sensorbuffercount = 0;
+                float _temp = sensorBuffer[0];
+                float _light = sensorBuffer[4];
+                temp = (int16_t) _temp;
+                light = (int16_t) _light;
+                rh = sensorBuffer[8];
+                co2 = sensorBuffer[10];
+                voc = sensorBuffer[12];
+                //uint8_t checksum = sensorBuffer[14];
+                iM880A_SendUDataTelegram((uint8_t*)&sensorBuffer, 15);
+                fs_write_file(SENSOR_FILE_ID, 0, (uint8_t*)&sensorBuffer, 15);
+            }
+            else{
+                //-1 count, wrong buffer count
+                removefirst();
+            }
+        }
+    }else{
+        sensorbuffercount = 0;
+    }
+}
+void send_sigfox()
+{
+    //TODO: GET LATEST VALUES
+    //Sigfox - sensor
+    uart_send_string(sigfox,"AT$S ");
+    uart_send_byte(sigfox, 0x0D);//CR
+	uart_send_byte(sigfox, 0x0A);//CR
+    //Sigfox - GPS
+    uart_send_string(sigfox,"AT");
+    uart_send_byte(sigfox, 0x0D);//CR
+	uart_send_byte(sigfox, 0x0A);//CR
+    timer_post_task_delay(&send_sigfox, TIMER_TICKS_PER_SEC * 720); //12 minutes
 }
 void bootstrap()
 {
-    console_set_rx_interrupt_callback(console_rx_cb);
-	//console_print("Device booted\n");
-    //console_print("ID: ");
-	uint8_t id[8];
-	uint64_t id64 = hw_get_unique_id();
-	// convert from an unsigned long int to a 4-byte array
-	 id[0] = (uint8_t)((id64 >> 56) & 0xFF) ;
-	 id[1] = (uint8_t)((id64 >> 48) & 0xFF) ;
-	 id[2] = (uint8_t)((id64 >> 40) & 0XFF);
-	 id[3] = (uint8_t)((id64 >> 32)& 0XFF);
-	 id[4] = (uint8_t)((id64 >> 24) & 0xFF) ;
-	 id[5] = (uint8_t)((id64 >> 16) & 0xFF) ;
-	 id[6] = (uint8_t)((id64 >> 8) & 0XFF);
-	 id[7] = (uint8_t)((id64 & 0XFF));
-	console_print_bytes(id,8);
-    console_print("\n");
-	dae_access_profile_t access_classes[1] = {
+    dae_access_profile_t access_classes[1] = {
 	        {
 	            .control_scan_type_is_foreground = false,
 	            .control_csma_ca_mode = CSMA_CA_MODE_UNC,
@@ -460,7 +459,7 @@ void bootstrap()
 	        .access_profiles = access_classes
 	    };
 
-	    d7ap_stack_init(&fs_init_args, 0, false);
+	    d7ap_stack_init(&fs_init_args, NULL, false);
 
 	    //initSensors();
 
@@ -478,7 +477,28 @@ void bootstrap()
 	uart_enable(sigfox);
 	uart_set_rx_interrupt_callback(sigfox, &Sigfox_ProcessRxByte);
 	uart_rx_interrupt_enable(sigfox);
+    
+    sensor = uart_init(2, 115200, 5);
+	uart_enable(sensor);
+	uart_set_rx_interrupt_callback(sensor, &Sensor_ProcessRxByte);
+	uart_rx_interrupt_enable(sensor);
+    
+    	uint8_t id[8];
+	uint64_t id64 = hw_get_unique_id();
+	// convert from an unsigned long int to a 4-byte array
+	 id[0] = (uint8_t)((id64 >> 56) & 0xFF) ;
+	 id[1] = (uint8_t)((id64 >> 48) & 0xFF) ;
+	 id[2] = (uint8_t)((id64 >> 40) & 0XFF);
+	 id[3] = (uint8_t)((id64 >> 32)& 0XFF);
+	 id[4] = (uint8_t)((id64 >> 24) & 0xFF) ;
+	 id[5] = (uint8_t)((id64 >> 16) & 0xFF) ;
+	 id[6] = (uint8_t)((id64 >> 8) & 0XFF);
+	 id[7] = (uint8_t)((id64 & 0XFF));
+	uart_send_bytes(sensor,id,8);
 
+    
+    sched_register_task((&send_sigfox));
+    timer_post_task_delay(&send_sigfox, TIMER_TICKS_PER_SEC * 20);
     /* Setup LEUART with DMA */
     ubutton_register_callback(0, &userbutton_callback);
     ubutton_register_callback(1, &userbutton_callback);
